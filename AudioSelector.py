@@ -1,14 +1,24 @@
+from concurrent.futures import thread
 from email.mime import audio
 import tkinter as tk
 from tkinter import END, W, filedialog, ttk
 import os
+from colorama import init
 from pyparsing import col
+from sympy import true
+from BuilderWordDocx import BuilderWordDocx
 import audio_to_text
+import threading
 
-class AudioSelector:
+class AudioSelector(threading.Thread):
     def __init__(self, root):
         
+        self.thread_whisper = False
+        threading.Thread.__init__(self,name="thread_whisper",target=self.run_thread_whisper)
+        #Run thread Whisper.
+        self.start()
         self.AudioToText = audio_to_text.AudioToText()
+        self.builderWordDocx = BuilderWordDocx()
 
         #Set config window base.
         self.root = root
@@ -20,7 +30,7 @@ class AudioSelector:
         frame_master.grid(row = 0, column= 0,columnspan=3,padx=15,pady=15)
 
         #Set label input foldel
-        #self.label = tk.Label(frame, text="Seleccionar carpeta").grid(row=1,column=0,padx=5,pady=5)
+        self.label = tk.Label(frame_master, text="Seleccionar carpeta").grid(row=1,column=0,padx=5,pady=5)
 
         #Set entry folder selected
         self.folder_path = tk.StringVar()
@@ -29,14 +39,10 @@ class AudioSelector:
         #Set button open folder selected
         self.browse_button = tk.Button(frame_master, text="Seleccionar carpeta audios", command=self.browse_folder).grid(row=1,column=3,padx=5,pady=5,sticky='ew')
 
-        #Set list frame
-        #self.audio_list_frame = tk.Frame(frame)
-
         #Set audio listbox 
         self.audio_listbox = tk.Listbox(frame_master,selectmode=tk.SINGLE,width=30)
         self.audio_listbox.grid(row=2,column=0,padx=5,pady=5)
         self.audio_listbox.bind('<<ListboxSelect>>', self.event_listbox)
-
 
         #Set frame
         self.frame_buttons_add_and_remove = tk.Label(frame_master)
@@ -52,7 +58,6 @@ class AudioSelector:
         self.remove_audio_button = tk.Button(self.frame_buttons_add_and_remove,text="<=",command=self.event_remove_audio)
         self.remove_audio_button.grid(row=1,column=0,padx=5,pady=5,sticky='s')
 
-
         #Set listbox selected
         self.audio_listbox_selected = tk.Listbox(frame_master,selectmode=tk.SINGLE,width=30)
         self.audio_listbox_selected.grid(row=2,column=3 ,padx=5,pady=5)
@@ -63,8 +68,19 @@ class AudioSelector:
         self.converter_button.grid(row=3,column=0,padx=5,pady=5,sticky='we')
 
         #Set progress bar
-        self.progress = ttk.Progressbar(frame_master, orient='horizontal', length=200, mode='determinate')
-        self.progress.grid(row=3, column=1, padx=5, pady=5,sticky='nsew')
+        self.progressbar = ttk.Progressbar(frame_master, orient='horizontal', mode='determinate')
+        self.progressbar.grid(row=3, column=1, padx=5,columnspan=2, pady=5,sticky='nsew')
+
+        #Set label text progress bar 
+        self.label_progressbar = ttk.Label(frame_master,text=self.init_text_progessbar())
+        self.label_progressbar.grid(row=4,column=1, sticky='nsew')
+
+        #Set label_name_file
+        self.label_name_file = ttk.Label(frame_master,text="Nombre del archivo word")
+        self.label_name_file.grid(row=5,column=0, sticky='nsew',pady=5) 
+
+        self.entry_name_file = tk.Entry (frame_master)
+        self.entry_name_file.grid(row=5,column=1, sticky='nsew',pady=5)
 
         #Create variables 
         self.path_folder_audios = ""
@@ -73,6 +89,8 @@ class AudioSelector:
         self.index_list_box_output = None
         self.select_audio_item = None
         self.transcriptions_texts_raw = []
+        self.total_segment = 0
+        self.current_step = 0
 
 
     def browse_folder(self):
@@ -108,20 +126,11 @@ class AudioSelector:
             self.select_audio_item = None
         
     def event_remove_audio(self):
-        print("remove audio")
         if self.index_list_box_output  and self.select_audio_item:
             self.audio_listbox_selected.delete(self.index_list_box_output[0])
             self.audio_listbox.insert(tk.END, self.select_audio_item)
             self.index_list_box_output = None
             self.select_audio_item = None
-
-        print("listbox iz")
-        for item in self.audio_listbox.get(0,END):
-            print(item)
-        print("listbox de")
-        for item2 in self.audio_listbox_selected.get(0,END):
-            print(item2)
-
         
     def get_path_complete(self,item):
         return os.path.normpath(os.path.join(self.path_folder_audios,item))
@@ -129,27 +138,50 @@ class AudioSelector:
     def update_files_to_process(self):
         self.selected_files = []
         for audio in self.audio_listbox_selected.get(0,END):
-            self.selected_files.append(self.get_path_complete(audio))
+            self.selected_files.append(self.get_path_complete(audio))   
     
-    def configurar_progress_bar(self,max_duration):
-        self.progress.
-
-    def run_converter(self):
-        self.update_files_to_process()
-        duration_total =  self.AudioToText.calculate_total_duration_in_seconds(self.selected_files)
-        print(duration_total)
-        print(self.selected_files)
-
-        """if self.selected_files:
-            print("Arrancando transcripcion")
-            self.transcriptions_texts_raw = audio_to_text.transcribe_audio_list_by_segments(self.selected_files)
-            print("Transcripciones terminadas")
-            print(self.transcriptions_texts_raw)
+    def callback_update_progressbar(self):
+        self.current_step += 1   
+        self.progressbar['value'] = self.current_step
+        self.label_progressbar['text'] = self.messageProcess(self.current_step)
+    
+    def messageProcess(self,current_step) -> str:
+        porcentege = int((100*current_step)/self.total_segment)
+        if porcentege != 100:
+            return  f"Procesado actual: {porcentege}%"
         else:
-            print("no run program")
-        pass"""
+            return f"Termianado"
 
+    def reset_progressbar(self,total_segment):
+        self.label_progressbar['text'] =  f"Procesado actual: {0.00}%"
+        self.progressbar.configure(maximum=total_segment)
+        self.current_step = 0
+        self.progressbar['value'] = self.current_step
+        
 
+    def init_text_progessbar(self):
+        return f"Procesado actual: {self.progressbar['value']}%"
+        
+    def run_converter(self):
+        self.thread_whisper = True
+  
+    def run_thread_whisper(self):
+        while True:
+            if self.thread_whisper:
+
+                self.update_files_to_process()
+                self.builderWordDocx.configure_path_save_document(self.path_folder_audios)
+                self.total_segment = self.AudioToText.calculate_total_duration_total_segment(self.selected_files)
+                self.reset_progressbar(self.total_segment)
+
+                if self.selected_files:
+                    self.transcriptions_texts_raw = self.AudioToText.transcribe_audio_list_by_segments(self.selected_files,self.callback_update_progressbar)
+                    self.builderWordDocx.create_docx(self.entry_name_file.get(),self.transcriptions_texts_raw)
+                else:
+                    print("no run program")
+                self.thread_whisper = False
+
+            
 if __name__ == "__main__":
     root = tk.Tk()
     app = AudioSelector(root)
