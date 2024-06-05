@@ -7,17 +7,16 @@ import torch
 class AudioToText():
 
     def __init__(self) -> None:
-        # Verificar si CUDA está disponible y seleccionar el dispositivo
+        # Verifier if exist cuda core or only cpu
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        # Cargar el modelo y moverlo a la GPU si está disponible
+        # Load model in cpu 
         self.modelo = whisper.load_model("base").to(self.device)
-        #self.modelo =  whisper.load_model("base")
+        
         self.simple_rate = 16000
 
     def load_audio_complete(self,audio_path, sample_rate=16000):
         audio = whisper.load_audio(audio_path, sr=sample_rate)
         duracion = len(audio) / sample_rate
-        print(f"Duración del audio: {duracion:.2f} segundos")
         return audio
 
     def calculate_total_duration_total_segment(self,list_audio_path,segment_duration=30,sample_rate=16000):
@@ -46,7 +45,6 @@ class AudioToText():
         transcripcion_completa = ""
         for i, inicio in enumerate(segmentos):
             fin = min(inicio + duracion_segmento, total_duracion)
-            print(f"Transcribiendo segmento {i+1}/{len(segmentos)}: {inicio:.2f}s a {fin:.2f}s")
             audio_segmento = audio[int(inicio * sample_rate):int(fin * sample_rate)]
             transcripcion_segmento = self.transcribe_segment(self.modelo, audio_segmento)
             transcripcion_completa += transcripcion_segmento + " "
@@ -64,7 +62,6 @@ class AudioToText():
             
             for i, inicio in enumerate(segmentos):
                 fin = min(inicio + duracion_segmento, total_duracion)
-                print(f"Transcribiendo segmento {i+1}/{len(segmentos)}: {inicio:.2f}s a {fin:.2f}s")
                 audio_segmento = audio[int(inicio * sample_rate):int(fin * sample_rate)]
                 transcripcion_segmento = self.transcribe_segment(self.modelo, audio_segmento)
                 transcripcion_completa += transcripcion_segmento + " "
