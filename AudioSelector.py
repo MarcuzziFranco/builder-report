@@ -7,23 +7,26 @@ from colorama import init
 from pyparsing import col
 from sympy import true
 from BuilderWordDocx import BuilderWordDocx
-import audio_to_text
+import AudioToText
 import threading
 
 class AudioSelector(threading.Thread):
     def __init__(self, root):
         
+        self.running_thread = True
         self.thread_whisper = False
-        threading.Thread.__init__(self,name="thread_whisper",target=self.run_thread_whisper)
+        self.thread = threading.Thread(name="thread_whisper",target=self.run_thread_whisper)
         #Run thread Whisper.
-        self.start()
-        self.AudioToText = audio_to_text.AudioToText()
+        self.thread.start()
+        self.AudioToText = AudioToText.AudioToText()
         self.builderWordDocx = BuilderWordDocx()
 
         #Set config window base.
         self.root = root
         self.root.title("Selector de Audio")
         #self.root.geometry("800x600")
+
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         #Set config label base.
         frame_master = tk.LabelFrame(root,text="Convertirdor de archivos")
@@ -166,7 +169,7 @@ class AudioSelector(threading.Thread):
         self.thread_whisper = True
   
     def run_thread_whisper(self):
-        while True:
+        while self.running_thread:
             if self.thread_whisper:
 
                 self.update_files_to_process()
@@ -181,7 +184,12 @@ class AudioSelector(threading.Thread):
                     print("no run program")
                 self.thread_whisper = False
 
-            
+    
+    def on_closing(self):
+        self.running_thread = False
+        self.thread.join()
+        self.root.destroy()
+
 if __name__ == "__main__":
     root = tk.Tk()
     app = AudioSelector(root)
